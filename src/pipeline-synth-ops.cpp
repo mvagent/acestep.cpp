@@ -51,9 +51,9 @@ static const char * scan_num(const char * first, const char * last, float & v) {
         p++;
         double frac = 0.1;
         while (p < last && *p >= '0' && *p <= '9') {
-            m    += (double) (*p - '0') * frac;
+            m += (double) (*p - '0') * frac;
             frac *= 0.1;
-            any   = true;
+            any = true;
             p++;
         }
     }
