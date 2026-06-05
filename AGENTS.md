@@ -2,7 +2,13 @@
 
 ## Fork and branch management
 
-Treat the acestep.cpp source, maintained, and sandbox forks as participating in the full fork and branch management strategy defined by the active branching skill.
+Treat the acestep.cpp upstream source repo, canonical maintained repo, and sandbox repo as participating in the full fork and branch management strategy defined by the active branching skill.
+
+Use these remote-role names in local clones that adopt this policy:
+
+- `upstream` for `https://github.com/ServeurpersoCom/acestep.cpp.git`
+- `canonical` for `https://github.com/mvdirty/acestep.cpp.git`
+- `sandbox` for `https://github.com/mvagent/acestep.cpp.git`
 
 Before branch, worktree, sync, PR, or cleanup work, apply that skill's repository-role, remote-role, branch-lineage, series, agent-branch, source-selection, ownership, and safety rules.
 
