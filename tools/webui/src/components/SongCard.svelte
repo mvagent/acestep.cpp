@@ -22,8 +22,9 @@
 		jobResultLatents
 	} from '../lib/api.js';
 	import { saveJob, clearJob, putSong } from '../lib/db.js';
-	import type { Song } from '../lib/types.js';
+	import type { AceRequest, Song } from '../lib/types.js';
 	import { displaySongName } from '../lib/songName.js';
+	import { createStoreZip, downloadBlob, type DownloadFile } from '../lib/download.js';
 	import Waveform from './Waveform.svelte';
 	import Menu, { type MenuItem } from './Menu.svelte';
 	import Dialog from './Dialog.svelte';
@@ -42,6 +43,11 @@
 	// "(variant task)" suffix rebuilt from the request, used for the card
 	// title and download filenames. Song.name itself stays the base name.
 	let displayName = $derived(displaySongName(song));
+	let hasRequestJson = $derived(hasDownloadableRequest(song.request));
+	let downloadCount = $derived(
+		(hasRequestJson ? 1 : 0) + (song.audio ? 1 : 0) + (song.latents ? 1 : 0)
+	);
+	let canDownloadBundle = $derived(downloadCount > 1);
 
 	function toggleRef() {
 		if (isRef) {
@@ -149,15 +155,44 @@
 		}
 	}
 
-	function downloadAudio() {
-		const url = URL.createObjectURL(song.audio);
-		const a = document.createElement('a');
-		a.href = url;
-		const safe = displayName.replace(/[\\/:*?"<>|\x00-\x1f]/g, '') || 'song';
+	function hasDownloadableRequest(request: AceRequest): boolean {
+		return Object.values(request).some((value) =>
+			typeof value === 'string' ? value.trim() !== '' : value != null
+		);
+	}
+
+	function safeDownloadStem(): string {
+		return displayName.replace(/[\\/:*?"<>|\x00-\x1f]/g, '') || 'song';
+	}
+
+	function requestJsonFilename(): string {
+		return `${safeDownloadStem()}.json`;
+	}
+
+	function audioFilename(): string {
 		const ext = song.format.startsWith('wav') ? '.wav' : '.mp3';
-		a.download = `${safe}${ext}`;
-		a.click();
-		URL.revokeObjectURL(url);
+		return `${safeDownloadStem()}${ext}`;
+	}
+
+	function latentsFilename(): string {
+		return `${safeDownloadStem()}.vae`;
+	}
+
+	function bundleFilename(): string {
+		return `${safeDownloadStem()}.zip`;
+	}
+
+	function requestJsonBlob(): Blob {
+		return new Blob([JSON.stringify(song.request, null, 2)], { type: 'application/json' });
+	}
+
+	function downloadJson() {
+		if (!hasDownloadableRequest(song.request)) return;
+		downloadBlob(requestJsonBlob(), requestJsonFilename());
+	}
+
+	function downloadAudio() {
+		downloadBlob(song.audio, audioFilename());
 	}
 
 	// Download the cached latents blob as a .vae file. Symmetric to
@@ -166,13 +201,32 @@
 	// VAE encode on reuse.
 	function downloadLatents() {
 		if (!song.latents) return;
-		const url = URL.createObjectURL(song.latents);
-		const a = document.createElement('a');
-		a.href = url;
-		const safe = displayName.replace(/[\\/:*?"<>|\x00-\x1f]/g, '') || 'song';
-		a.download = `${safe}.vae`;
-		a.click();
-		URL.revokeObjectURL(url);
+		downloadBlob(song.latents, latentsFilename());
+	}
+
+	function bundleFiles(): DownloadFile[] {
+		const files: DownloadFile[] = [];
+		if (hasDownloadableRequest(song.request)) {
+			files.push({ name: requestJsonFilename(), blob: requestJsonBlob() });
+		}
+		if (song.audio) {
+			files.push({ name: audioFilename(), blob: song.audio });
+		}
+		if (song.latents) {
+			files.push({ name: latentsFilename(), blob: song.latents });
+		}
+		return files;
+	}
+
+	async function downloadBundle() {
+		const files = bundleFiles();
+		if (files.length < 2) return;
+		try {
+			const zip = await createStoreZip(files);
+			downloadBlob(zip, bundleFilename());
+		} catch (e: unknown) {
+			toast(e instanceof Error ? e.message : String(e));
+		}
 	}
 
 	// VAE-only scan: POST /vae with the source audio (encode path), attach
@@ -269,11 +323,17 @@
 	}
 
 	// Single action menu: one entry per user intent. Order mirrors a natural
-	// flow (tweak prompt -> rename -> grab audio -> work with latents -> inspect -> destroy).
+	// flow (tweak prompt -> rename -> grab artifacts -> work with latents -> inspect -> destroy).
 	// Destructive entries open a confirm dialog.
 	const actionItems: MenuItem[] = $derived([
 		{ icon: Pencil, label: 'Edit prompt', onSelect: load },
 		{ icon: Type, label: 'Rename song', onSelect: openRename },
+		{
+			icon: Download,
+			label: 'Download JSON',
+			onSelect: downloadJson,
+			disabled: !hasRequestJson
+		},
 		{ icon: Download, label: 'Download audio', onSelect: downloadAudio },
 		{ icon: Cpu, label: 'Compute VAE latents', onSelect: encodeOnly, disabled: !!song.latents },
 		{
@@ -281,6 +341,12 @@
 			label: 'Download VAE latents',
 			onSelect: downloadLatents,
 			disabled: !song.latents
+		},
+		{
+			icon: Download,
+			label: 'Download all',
+			onSelect: downloadBundle,
+			disabled: !canDownloadBundle
 		},
 		{ icon: Ear, label: 'LM understand', onSelect: scan },
 		{ icon: Trash2, label: 'Delete this track', onSelect: () => (confirmDeleteOpen = true) },
