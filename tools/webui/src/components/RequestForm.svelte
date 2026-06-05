@@ -43,6 +43,7 @@
 		pickSections
 	} from '../lib/fields.js';
 	import type { AceRequest, Song } from '../lib/types.js';
+	import { downloadBlob } from '../lib/download.js';
 	import Dialog from './Dialog.svelte';
 	import DialogButton from './DialogButton.svelte';
 
@@ -215,13 +216,8 @@
 		const text = format === 'json' ? JSON.stringify(req, null, 2) : yamlStringify(req);
 		const mime = format === 'json' ? 'application/json' : 'application/x-yaml';
 		const blob = new Blob([text], { type: mime });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
 		const safe = app.name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '') || 'request';
-		a.download = `${safe}.${format}`;
-		a.click();
-		URL.revokeObjectURL(url);
+		downloadBlob(blob, `${safe}.${format}`);
 	}
 
 	function importJson() {
